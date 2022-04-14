@@ -1,8 +1,31 @@
+# mdchat_serverconf
+
+`mdchat_serverconf` is a dependency of [`mdchat_server`](../server/README.md). This dependency allows the server to be configurable. This dependency is automatically included when compiling the server.
+
+See [Configuration](#configuration) section below for more information how [`mdchat_server`](../server/README.md) can be configured.
+
+# Dependencies
+
+**Internal dependencies**
+
+*No internal dependencies.*
+
+**External dependencies**
+
+- [`mdcrypt`](https://github.com/dousamichal0807/mdcrypt)
+- [`mdlog`](https://github.com/dousamichal0807/mdlog)
+
 # Configuration
+
+## Configuration file location
+
+Configuration file path is `/etc/mdchat-server.conf`.
 
 ## Configuration file syntax
 
-**Comments.** Server will parse a line as a comment if the line starts with the `#` symbol. Note that comment cannot start in the middle of a line.
+### Comments
+
+Server will parse a line as a comment if the line starts with the `#` symbol. Note that comment cannot start in the middle of a line.
 
 ```
 # This is how comment looks.
@@ -11,7 +34,9 @@
 listen 0.0.0.0:4000 # This is not considered as a comment.
 ```
 
-**Options.** Each option as a name and arguments. Option name and argument list must be separated by at least one space (if there are only tabs it does not work).
+### Options
+
+Each option as a name and arguments. Option name and argument list must be separated by at least one space (if there are only tabs it does not work).
 
 ```
 # Some examples (this line is a comment, by the way):
@@ -38,7 +63,7 @@ For each configuration option following is provided:
 - [`nickname-allow`](#nickname-allow)
 - [`nickname-ban`](#nickname-ban)
 - [`nickname-length-max`](#nickname-length-max)
-- `nickname-length-min`
+- [`nickname-length-min`](#nickname-length-min)
 
 ### `ip-ban`
 
@@ -98,8 +123,8 @@ message-length-max nolimit
 # Limited to 2000 bytes
 message-length-max 2000
 # And these will fail since given number is out of range:
-# message-length-max 0        <-- DOES NOT WORK!
-# message-length-max 100000   <-- DOES NOT WORK!
+#message-length-max 0        <-- DOES NOT WORK!
+#message-length-max 100000   <-- DOES NOT WORK!
 ```
 
 ### `nickname-allow`
@@ -125,7 +150,7 @@ nickname-allow admin-doejohn
 
 ### `nickname-ban`
 
-Bans nicknames using given regular expression. This should used to filter users with inappropriate nicknames. Using this option is highly recommended. To allow only specific format of nickname use the regex negation operator `(?!an_expression_here)`.
+This option is for banning nicknames using given regular expression. This should be used to filter users with inappropriate nicknames. Using this option is highly recommended. To allow only specific format of nickname use the regex negation operator `(?!an_expression_here)`.
 
 ```
 nickname-ban <regex-string>
@@ -142,13 +167,41 @@ nickname-ban .*[Ff][_ -\.:;]*[Uu][_ -\.:;]*[Cc][_ -\.:;]*[Kk].*
 
 ### `nickname-length-max`
 
-Sets the maximum length of a nickname in bytes which should be OK. Maximum length must be between 1 and 100, longer nicknames than 100 bytes are not allowed and there is no way to allow them without changing the source code.
+Sets the maximum length of a nickname in bytes which should be possible to use. Maximum length must be between 1 and 255, longer nicknames than 255 bytes are not allowed and there is no way to allow them without changing the source code. Default value is 255.
 
-If maximum nickname length is lower than minimum nickname length, server will halt with fatal error.
+If maximum nickname length is out of bounds, server will halt with fatal error. If maximum nickname length is specified more than once server will use the latest declared value.
 
 ```
 nickname-length-max <integer>
 ```
 ```
-#
+# This is OK:
+nickname-length-max 20
+nickname-length-max 100
+nickname-length-max 255
+# Too high:
+#nickname-length-max 256   <-- DOES NOT WORK!
+#nickname-length-max 300   <-- DOES NOT WORK!
+# Only positive numbers are allowed:
+#nickname-length-max 0     <-- DOES NOT WORK!
+#nickname-length-max -20   <-- DOES NOT WORK!
+```
+
+###  `nickname-length-min`
+
+Sets the minimum possible length of a nickname in bytes. Works the same way as [`nickname-length-max`](#nickname-length-max). Default value is 1.
+
+```
+nickname-length-min <integer>
+```
+```
+# It is recommended to use small value.
+nickname-length-min 1
+nickname-length-min 2
+nickname-length-min 10
+# This is NOT recommended:
+nickname-length-min 100
+# These are out of range:
+#nickname-length-min 0     <-- DOES NOT WORK!
+#nickname-length-min 256   <-- DOES NOT WORK!
 ```

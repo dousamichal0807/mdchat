@@ -3,7 +3,13 @@ A chat client using Vigèner's encryption.
 
 ## Dependencies
 
-- [`mdchat_common`](https://github.com/dousamichal0807/mdchat_common) containing parts appropriate for both server and client
+**Internal dependencies**
+
+- `mdchat_common`
+
+**External dependencies**
+
+- [`mdcrypt`](https://github.com/dousamichal0807/mdcrypt)
 
 ## Building
 
