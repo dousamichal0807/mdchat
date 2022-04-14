@@ -1,0 +1,12 @@
+[package]
+name = "mdchat_client"
+version = "0.2.0"
+authors = ["Michal Douša <dousamichal0807@seznam.cz>"]
+edition = "2018"
+
+[dependencies]
+lazy_static = "1.4"
+mdchat_common = { path = "../common" }
+mdcrypt = { git = "https://github.com/dousamichal0807/mdcrypt" }
+mdlog = { git = "https://github.com/dousamichal0807/mdlog" }
+mdswp = { git = "https://github.com/dousamichal0807/mdswp" }
