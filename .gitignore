@@ -4,3 +4,7 @@
 
 # VS Code specific
 .vscode
+
+# Rust
+Cargo.lock
+target

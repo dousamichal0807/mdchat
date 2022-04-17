@@ -15,5 +15,3 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-pub mod c2s;
-pub mod s2c;
