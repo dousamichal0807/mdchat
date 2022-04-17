@@ -1,5 +1,4 @@
 # mdchat-client
-A chat client using Vigèner's encryption.
 
 ## Dependencies
 
@@ -11,17 +10,19 @@ A chat client using Vigèner's encryption.
 
 - [`mdcrypt`](https://github.com/dousamichal0807/mdcrypt)
 
-## Building
+## Compilation
 
-Build the project using Rust's Cargo:
+To compile the project:
 
 ```sh
-# For building
+# 1. Download the project using Git
+git clone https://github.com/dousamichal0807/mdchat.git
+# 2. Navigate into the directory
+cd mdchat
+# 3. Change the branch from `development` to a stable branch, for example:
+git checkout -b v0.2.0
+# 4. Navigate into client directory
+cd client
+# 5. Build with Cargo
 cargo build --release
-# For running
-cargo run --release
 ```
-
-## License
-
-This project is licensed under GNU GPL v3. See [`LICENSE` file](./LICENSE) for more details.

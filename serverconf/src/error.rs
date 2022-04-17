@@ -1,4 +1,25 @@
+/*
+ * Copyright (c) 2022 Michal Douša. All rights reserved.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+use std::fmt;
+use std::fmt::Display;
+use std::fmt::Formatter;
 use std::io;
+
 use thiserror::Error;
 
 /// A type alias for result of parsing a configuration file.
@@ -13,13 +34,13 @@ pub struct ConfigParseError {
 }
 
 impl ConfigParseError {
-    /// Creates a new [`ConfigParseError`] instance from given file path and config kind.
+    /// Creates a new [`ConfigParseError`] instance from given file path and error kind.
     pub fn new(file_path: String, kind: ConfigParseErrorKind) -> Self {
         Self { file_path, kind }
     }
 
-    /// Creates a new [`ConfigParseError`] instance with [`Syntax`] config kind using
-    /// given given file path, line number and config description.
+    /// Creates a new [`ConfigParseError`] instance with [`Syntax`] error kind using
+    /// given given file path, line number and error description.
     ///
     /// [`Syntax`]: ConfigParseErrorKind::Syntax
     pub fn syntax_error(file_path: String, line_num: u32, description: String) -> Self {
@@ -29,7 +50,7 @@ impl ConfigParseError {
         }
     }
 
-    /// Creates a new [`ConfigParseError`] instance with [`Io`] config kind using
+    /// Creates a new [`ConfigParseError`] instance with [`Io`] error kind using
     /// given file path and [`std::io::Error`].
     ///
     /// [`Io`]: ConfigParseErrorKind::Io
@@ -57,21 +78,28 @@ impl ConfigParseError {
 #[derive(Error, Debug)]
 pub enum ConfigParseErrorKind {
 
-    /// Represents an config caused by an unsuccessful I/O operation.
-    #[error("I/O error: {io_error}")]
+    /// Represents an error caused by an unsuccessful I/O operation.
     Io {
-        /// The underlying I/O config
+        /// The underlying I/O error
         #[from]
         io_error: io::Error
     },
 
-    /// Represents an config caused by invalid syntax of the configuration file which
+    /// Represents an error caused by invalid syntax of the configuration file which
     /// has been read.
-    #[error("Line {line_num}: {description}")]
     Syntax {
-        /// Line number, where config was found
+        /// Line number, where error was found
         line_num: u32,
-        /// Description of the config
+        /// Description of the error
         description: String
+    }
+}
+
+impl Display for ConfigParseErrorKind {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Self::Io { io_error } => write!(f, "I/O error: {}", io_error),
+            Self::Syntax { line_num, description } => write!(f, "Line {}: {}", line_num, description)
+        }
     }
 }

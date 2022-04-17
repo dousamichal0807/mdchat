@@ -1,18 +1,41 @@
-mod error;
-mod ip;
+/*
+ * Copyright (c) 2022 Michal Douša. All rights reserved.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 
-pub use self::error::ConfigParseError;
-pub use self::error::ConfigParseResult;
-pub use self::error::ConfigParseErrorKind;
+//! `mdchat_serverconf` is a dependency of `mdchat_server`. This dependency allows
+//! the server to be configurable. This dependency is automatically included when
+//! compiling the server. See `mdchat_serverconf`'s README for more information
+//! about possible configurability.
 
-use mdlog::CompositeLogger;
+#[doc(hidden)] mod error;
+pub mod ip;
+pub mod nickname;
+
+pub use crate::error::ConfigParseError;
+pub use crate::error::ConfigParseResult;
+pub use crate::error::ConfigParseErrorKind;
+pub use crate::ip::IpFilteringConfig;
+pub use crate::nickname::NicknameFilteringConfig;
+
+use mdlog::loggers::CompositeLogger;
 
 use once_cell::sync::Lazy;
 
 use regex::Regex;
 
-use std::cmp::max;
-use std::cmp::min;
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::fs::File;
@@ -20,33 +43,21 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::net::AddrParseError;
 use std::net::IpAddr;
-use std::net::Ipv4Addr;
-use std::net::Ipv6Addr;
 use std::net::SocketAddr;
 use std::num::NonZeroU16;
-use std::num::NonZeroU8;
-use std::ops::RangeInclusive;
 use std::path::Path;
-use crate::ip::IpConfig;
-
-macro_rules! assert_valid_config {
-    ($this:expr) => {
-        assert!($this.is_valid_config(), "Tried to query config in an invalid state");
-    }
-}
+use std::sync::RwLock;
 
 static REGEX_WHITESPACE: Lazy<Regex> = Lazy::new(|| Regex::new("[ \t]+").unwrap());
 
+/// Represents a complete configuration of the server.
 pub struct Config {
-    ip_config: IpConfig,
-    listen_sock_addrs: HashSet<SocketAddr>,
-    logger: CompositeLogger,
-    message_max_len: NonZeroU16,
-    message_min_len: NonZeroU16,
-    nicknames_banned: Vec<Regex>,
-    nicknames_allowed: HashSet<String>,
-    nickname_max_len: NonZeroU8,
-    nickname_min_len: NonZeroU8,
+    ip_filtering: RwLock<IpFilteringConfig>,
+    listen_sock_addrs: RwLock<HashSet<SocketAddr>>,
+    logger: RwLock<CompositeLogger>,
+    message_max_len: RwLock<NonZeroU16>,
+    message_min_len: RwLock<NonZeroU16>,
+    nickname_filtering: RwLock<NicknameFilteringConfig>
 }
 
 impl Default for Config {
@@ -56,43 +67,60 @@ impl Default for Config {
 }
 
 impl Config {
-    /// Create a new [`Config`] instance with default values.
-    pub(crate) fn new() -> Self {
+    /// Creates a new [`Config`] instance with default values.
+    ///
+    /// Calling this constructor is same as using [`Default`] trait implementation.
+    pub fn new() -> Self {
         Self {
-            ip_config: IpConfig::new(),
-            listen_sock_addrs: HashSet::new(),
-            logger: CompositeLogger::new(),
-            message_max_len: unsafe { NonZeroU16::new_unchecked(u16::MAX) },
-            message_min_len: unsafe { NonZeroU16::new_unchecked(1) },
-            nicknames_banned: Vec::new(),
-            nicknames_allowed: HashSet::new(),
-            nickname_max_len: unsafe { NonZeroU8::new_unchecked(u8::MAX) },
-            nickname_min_len: unsafe { NonZeroU8::new_unchecked(1) },
+            ip_filtering: RwLock::new(IpFilteringConfig::new()),
+            listen_sock_addrs: RwLock::new(HashSet::new()),
+            logger: RwLock::new(CompositeLogger::new()),
+            message_max_len: unsafe { RwLock::new(NonZeroU16::new_unchecked(u16::MAX)) },
+            message_min_len: unsafe { RwLock::new(NonZeroU16::new_unchecked(1)) },
+            nickname_filtering: RwLock::new(NicknameFilteringConfig::new())
         }
     }
 
-    /// Appends other [`Config`] instance to `self`. Fields, which are not
-    /// collections, will get overwritten by the other instance. Fields
-    /// which collections are, will be merged with `self`'s fields.
-    pub fn append(&mut self, mut other: Self) {
-        self.ip_config.append(&other.ip_config);
-        self.listen_sock_addrs = &self.listen_sock_addrs | &other.listen_sock_addrs;
-        //self.logger.append(&mut other.logger);
-        self.message_max_len = other.message_max_len;
-        self.message_min_len = other.message_min_len;
-        self.nicknames_banned.append(&mut other.nicknames_banned);
-        self.nicknames_allowed = &self.nicknames_allowed | &other.nicknames_allowed;
-        self.nickname_max_len = other.nickname_max_len;
-        self.nickname_min_len = other.nickname_min_len;
+    /// Appends other [`Config`] instance to `self`.
+    ///
+    /// Fields, which are not collections, will get overwritten by the `other`
+    /// instance. Fields which are collections, will be merged with `self`'s fields.
+    pub fn append(&self, other: Self) {
+        // IP filtering
+        self.ip_filtering.write().unwrap().append(&*other.ip_filtering.read().unwrap());
+        // Listener socket addresses
+        let mut self_listen = self.listen_sock_addrs.write().unwrap();
+        let other_listen = other.listen_sock_addrs.read().unwrap();
+        *self_listen = &*self_listen | &*other_listen;
+        // Logging
+        let mut self_logger = self.logger.write().unwrap();
+        self_logger.append(other.logger.into_inner().unwrap());
+        // Message filtering
+        *self.message_max_len.write().unwrap() = *other.message_max_len.read().unwrap();
+        *self.message_min_len.write().unwrap() = *other.message_min_len.read().unwrap();
+        // Nickname filtering
+        self.nickname_filtering.write().unwrap().append(other.nickname_filtering.into_inner().unwrap());
     }
 
-    pub fn process_file<P>(&mut self, file_path: P, rollback_on_error: bool) -> ConfigParseResult<()>
+    pub fn ip_filtering(&self) -> &RwLock<IpFilteringConfig> {
+        &self.ip_filtering
+    }
+
+    pub fn logger(&self) -> &RwLock<CompositeLogger> {
+        &self.logger
+    }
+
+    pub fn nickname_filtering(&self) -> &RwLock<NicknameFilteringConfig> {
+        &self.nickname_filtering
+    }
+
+    pub fn process_file<P>(&self, file_path: P, rollback_on_error: bool) -> ConfigParseResult<()>
         where P: AsRef<Path> + Display,
     {
         if rollback_on_error {
             // Provide a rollback when config occurs by saving into temporary
             // `Config` instance without rollbacking:
-            let mut temp_config = Config::default();
+            let temp_config = Config::default();
             temp_config.process_file(file_path, false)?;
             // If loading is successful, merge configs and return Ok:
             self.append(temp_config);
@@ -120,20 +148,20 @@ impl Config {
     }
 
     /// Parses a string of characters.
-    pub fn process_string(&mut self, string: &str) -> ConfigParseResult<()> {
+    pub fn process_string(&self, string: &str) -> ConfigParseResult<()> {
         // Process line by line:
         let mut line_num = 1u32;
         for line in string.lines() {
             // If there is an config return immediately (`?` operator):
             self.process_line(line)
-                .map_err(|desc| ConfigParseError::syntax_error("IN".to_string(), line_num, desc))?;
+                .map_err(|desc| ConfigParseError::syntax_error(String::new(), line_num, desc))?;
             line_num += 1;
         }
         // If processing was successful, return Ok:
         Result::Ok(())
     }
 
-    pub fn process_line(&mut self, line: &str) -> Result<(), String> {
+    pub fn process_line(&self, line: &str) -> Result<(), String> {
         // Trim whitespaces
         let line = line.trim();
         // If there is newline character, panic!
@@ -154,9 +182,8 @@ impl Config {
         match option {
             "ip-allow" => self.__process_ip_allow(arg),
             "ip-ban" => self.__process_ip_ban(arg),
-            "ip-ban-range" => self.__process_ip_ban_range(arg),
-            "nickname-allow" => self.__process_nickname_allow(arg),
-            "nickname-ban" => self.__process_nickname_ban(arg),
+            "ip-ban-ip" => self.__process_ip_ban_range(arg),
+            "nickname" => self.__process_nickname_command(arg),
             "listen" => self.__process_listen(arg),
             "message-length-max" => self.__process_msg_len_max(arg),
             other => Result::Err(format!("`{}` is an invalid option", other))
@@ -164,28 +191,28 @@ impl Config {
     }
 
     #[doc(hidden)]
-    fn __process_ip_allow(&mut self, arg: Option<&str>) -> Result<(), String> {
+    fn __process_ip_allow(&self, arg: Option<&str>) -> Result<(), String> {
         arg.ok_or("IP address was expected after `ip-allow`".to_string())
             .and_then(|arg| arg.parse().map_err(|err|
                 format!("Invalid IP address after `ip-allow`: {}", err)))
-            .map(|ip_addr| { self.ip_config.allow(&ip_addr); })
+            .map(|ip_addr| { self.ip_filtering.write().unwrap().allow(ip_addr); })
     }
 
     #[doc(hidden)]
-    fn __process_ip_ban(&mut self, arg: Option<&str>) -> Result<(), String> {
+    fn __process_ip_ban(&self, arg: Option<&str>) -> Result<(), String> {
         arg.ok_or("IP address was expected after `ip-ban`".to_string())
             .and_then(|arg| arg.parse().map_err(|err|
                 format!("Invalid IP address after `ip-ban`: {}", err)))
-            .map(|ip_addr| { self.ip_config.ban(&ip_addr); })
+            .map(|ip_addr| { self.ip_filtering.write().unwrap().ban(ip_addr); })
     }
 
     #[doc(hidden)]
-    fn __process_ip_ban_range(&mut self, arg: Option<&str>) -> Result<(), String> {
+    fn __process_ip_ban_range(&self, arg: Option<&str>) -> Result<(), String> {
         // Constants
-        const ERR_GENERIC: &str = "Two IP addresses separated by space were expected after `ip-ban-range`";
+        const ERR_GENERIC: &str = "Two IP addresses separated by space were expected after `ip-ban-ip`";
         // Functions
         fn err_invalid_ip(ip: &str, err: AddrParseError) -> String {
-            format!("`ip-ban-range`: `{}` is not a valid IP address: {}", ip, err)
+            format!("`ip-ban-ip`: `{}` is not a valid IP address: {}", ip, err)
         }
         // Argument must be present
         let arg = arg.ok_or(ERR_GENERIC.to_string())?;
@@ -193,79 +220,48 @@ impl Config {
         let split: Vec<&str> = REGEX_WHITESPACE.split(arg.trim()).collect();
         if split.len() != 2 { return Result::Err(ERR_GENERIC.to_string()) }
         // Parse both parts:
-        let range_from = split[0].trim();
-        let range_to = split[1].trim();
-        let range_from_parsed = range_from.parse().map_err(|err| err_invalid_ip(range_from, err))?;
-        let range_to_parsed = range_to.parse().map_err(|err| err_invalid_ip(range_to, err))?;
+        let from = split[0].trim();
+        let from = from.parse().map_err(|err| err_invalid_ip(from, err))?;
+        let to = split[1].trim();
+        let to = to.parse().map_err(|err| err_invalid_ip(to, err))?;
         // Ban:
-        self.ip_config.ban_range(&range_from_parsed, &range_to_parsed)
+        self.ip_filtering.write().unwrap().ban_range(from, to)
             .map_err(|err| format!("`ip-ban-range`: {}", err))
+            .map(|_| ())
     }
 
     #[doc(hidden)]
-    fn __process_nickname_allow(&mut self, arg: Option<&str>) -> Result<(), String> {
-        arg.ok_or("Regular expression was expected after `nickname-ban`".to_string())
-            .map(|nickname| { self.nicknames_allowed.insert(nickname.to_string()); })
+    fn __process_nickname_command(&self, arg: Option<&str>) -> Result<(), String> {
+        arg.ok_or("Sub-command was expected after `nickname`".to_string())
+            .and_then(|arg| self.nickname_filtering.write().unwrap().process_line(arg))
     }
 
     #[doc(hidden)]
-    fn __process_nickname_ban(&mut self, arg: Option<&str>) -> Result<(), String> {
-        arg.ok_or("Regular expression was expected after `nickname-ban`".to_string())
-            .and_then(|arg| arg.parse().map_err(|err|
-                format!("Invalid regular expression after `nickname-ban`: {}", err)))
-            .map(|regex| self.nicknames_banned.push(regex))
-    }
-
-    #[doc(hidden)]
-    fn __process_listen(&mut self, arg: Option<&str>) -> Result<(), String> {
+    fn __process_listen(&self, arg: Option<&str>) -> Result<(), String> {
         arg.ok_or("Socket address was expected after `listen`".to_string())
             .and_then(|arg| arg.parse().map_err(|err|
                 format!("Invalid socket address after `listen`: {}", err)))
-            .map(|sockaddr| { self.listen_sock_addrs.insert(sockaddr); })
+            .map(|sockaddr| { self.listen_sock_addrs.write().unwrap().insert(sockaddr); })
 
     }
 
     #[doc(hidden)]
-    fn __process_msg_len_max(&mut self, arg: Option<&str>) -> Result<(), String> {
+    fn __process_msg_len_max(&self, arg: Option<&str>) -> Result<(), String> {
         arg.ok_or("`nolimit` or a number was expected after `message_length_max`".to_string())
-            .and_then(|arg| match arg {
-                "nolimit" => {
-                    self.message_max_len = unsafe { NonZeroU16::new_unchecked(u16::MAX) };
-                    Result::Ok(())
-                },
-                _ => arg.parse()
-                    .map_err(|_| "`nolimit` or a number was expected after `message_length_max`".to_string())
-                    .map(|num| { self.message_max_len = num; })
-            })
-    }
-
-    pub fn is_valid_config(&self) -> bool {
-        self.nickname_min_len <= self.nickname_max_len &&
-            self.message_min_len <= self.message_max_len
+            .and_then(|arg| arg.parse()
+                .map_err(|_| "`nolimit` or a number was expected after `message_length_max`".to_string()))
+            .map(|num| { *self.message_max_len.write().unwrap() = num; })
     }
 
     pub fn is_allowed_nickname(&self, nickname: &str) -> bool {
-        assert_valid_config!(self);
-        // Is in allowed nicknames?
-        if self.nicknames_allowed.contains(nickname) { return true }
-        // Is nickname length in bounds?
-        if nickname.len() < self.nickname_min_len.get().into() { return false }
-        if nickname.len() > self.nickname_max_len.get().into() { return false }
-        // Does nickname match any banned patterns?
-        for pattern in &self.nicknames_banned {
-            if pattern.is_match(nickname) { return false }
-        }
-        // If all this succeeded, return true
-        return true
+        self.nickname_filtering.read().unwrap().is_allowed(nickname)
     }
 
     pub fn is_allowed_ip_addr(&self, addr: &IpAddr) -> bool {
-        assert_valid_config!(self);
-        self.ip_config.is_allowed_addr(addr)
+        self.ip_filtering.read().unwrap().is_allowed(addr)
     }
 
-    pub fn listen_sock_addrs(&self) -> &HashSet<SocketAddr> {
-        assert_valid_config!(self);
+    pub fn listen_sock_addrs(&self) -> &RwLock<HashSet<SocketAddr>> {
         &self.listen_sock_addrs
     }
 }
