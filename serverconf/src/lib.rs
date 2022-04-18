@@ -30,7 +30,7 @@ pub use crate::error::ConfigParseErrorKind;
 pub use crate::ip::IpFilteringConfig;
 pub use crate::nickname::NicknameFilteringConfig;
 
-use mdlog::loggers::CompositeLogger;
+use mdlog::loggers::TextLogger;
 
 use once_cell::sync::Lazy;
 
@@ -41,23 +41,26 @@ use std::fmt::Display;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
+use std::io::Stdout;
+use std::io::stdout;
 use std::net::AddrParseError;
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::num::NonZeroU16;
 use std::path::Path;
 use std::sync::RwLock;
+use mdlog::LogLevel;
 
-static REGEX_WHITESPACE: Lazy<Regex> = Lazy::new(|| Regex::new("[ \t]+").unwrap());
+static REGEX_WHITESPACE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+").unwrap());
 
 /// Represents a complete configuration of the server.
 pub struct Config {
     ip_filtering: RwLock<IpFilteringConfig>,
+    nickname_filtering: RwLock<NicknameFilteringConfig>,
     listen_sock_addrs: RwLock<HashSet<SocketAddr>>,
-    logger: RwLock<CompositeLogger>,
+    logger: RwLock<TextLogger<Stdout>>,
     message_max_len: RwLock<NonZeroU16>,
     message_min_len: RwLock<NonZeroU16>,
-    nickname_filtering: RwLock<NicknameFilteringConfig>
 }
 
 impl Default for Config {
@@ -74,7 +77,7 @@ impl Config {
         Self {
             ip_filtering: RwLock::new(IpFilteringConfig::new()),
             listen_sock_addrs: RwLock::new(HashSet::new()),
-            logger: RwLock::new(CompositeLogger::new()),
+            logger: RwLock::new(TextLogger::new(LogLevel::Info, stdout())),
             message_max_len: unsafe { RwLock::new(NonZeroU16::new_unchecked(u16::MAX)) },
             message_min_len: unsafe { RwLock::new(NonZeroU16::new_unchecked(1)) },
             nickname_filtering: RwLock::new(NicknameFilteringConfig::new())
@@ -92,9 +95,6 @@ impl Config {
         let mut self_listen = self.listen_sock_addrs.write().unwrap();
         let other_listen = other.listen_sock_addrs.read().unwrap();
         *self_listen = &*self_listen | &*other_listen;
-        // Logging
-        let mut self_logger = self.logger.write().unwrap();
-        self_logger.append(other.logger.into_inner().unwrap());
         // Message filtering
         *self.message_max_len.write().unwrap() = *other.message_max_len.read().unwrap();
         *self.message_min_len.write().unwrap() = *other.message_min_len.read().unwrap();
@@ -102,11 +102,14 @@ impl Config {
         self.nickname_filtering.write().unwrap().append(other.nickname_filtering.into_inner().unwrap());
     }
 
+    /// Returns a read-write lock to the [`IpFilteringConfig`] instance of the
+    /// [`Config`].
     pub fn ip_filtering(&self) -> &RwLock<IpFilteringConfig> {
         &self.ip_filtering
     }
 
-    pub fn logger(&self) -> &RwLock<CompositeLogger> {
+    /// Returns a read-write lock to the [`TextLogger`] printing to [`stdout`]
+    pub fn logger(&self) -> &RwLock<TextLogger<Stdout>> {
         &self.logger
     }
 
@@ -182,7 +185,7 @@ impl Config {
         match option {
             "ip-allow" => self.__process_ip_allow(arg),
             "ip-ban" => self.__process_ip_ban(arg),
-            "ip-ban-ip" => self.__process_ip_ban_range(arg),
+            "ip-ban-range" => self.__process_ip_ban_range(arg),
             "nickname" => self.__process_nickname_command(arg),
             "listen" => self.__process_listen(arg),
             "message-length-max" => self.__process_msg_len_max(arg),

@@ -40,7 +40,7 @@ static GLOBAL_CONFIG: OnceCell<Arc<Config>> = OnceCell::new();
 
 /// Returns reference with interior mutability to the global configuration, that is
 /// an [`Arc`] pointing to a server-global [`Config`] instance.
-fn get_global_config() -> Arc<Config> {
+fn global_config() -> Arc<Config> {
     GLOBAL_CONFIG.get().unwrap().clone()
 }
 
@@ -48,33 +48,60 @@ fn get_global_config() -> Arc<Config> {
 /// exit code 1.
 fn load_global_config() {
     let mut config = Config::default();
-    if let Result::Err(err) = config.process_file("/etc/mdchat-server.conf", false) {
-        eprintln!("Could not load configuration file:");
-        eprintln!("{:?}", err);
-        exit(1);
+    match config.process_file("/etc/mdchat-server.conf", false) {
+        Result::Err(err) => {
+            eprintln!("Could not load configuration file:\n{:?}", err);
+            exit(1);
+        },
+        Result::Ok(()) => GLOBAL_CONFIG.set(Arc::new(config))
+            .map_err(|err| panic!("Value already set")).unwrap(),
     }
-    GLOBAL_CONFIG.set(Arc::new(config))
-        .map_err(|err| panic!("Value already set"));
 }
 
+/// Encrypts data as given by global configuration.
+///
+/// # Parameters
+///
+///  -  `data`: data to be encrypted
+///
+/// # Return value
+///
+/// A [`Vec`] of bytes ([`u8`]) representing the encrypted data.
+fn encrypt(data: &[u8]) -> Vec<u8> {
+    data.to_vec()
+}
+
+/// Decrypts data as given by global configuration.
+///
+/// # Parameters
+///
+///  -  `data`: data to be decrypted
+///
+/// # Return value
+///
+/// A [`Vec`] of bytes ([`u8`]) representing the decrypted data.
+fn decrypt(data: &[u8]) -> Vec<u8> {
+    data.to_vec()
+}
+
+/// Logs a message using logger configured by global configuration.
 fn log(log_level: LogLevel, message: &str) {
-    get_global_config().logger().write().unwrap().log(log_level, message);
+    global_config().logger().write().unwrap().log(log_level, message);
 }
 
-/// Here the server starts.
 fn main() {
     // Load config
     load_global_config();
-    let global_config = get_global_config();
+    log(LogLevel::Info, "Configuration file loaded successfully");
 
     // Initialize listeners for incoming connections:
-    let listen_sock_addrs = global_config.listen_sock_addrs().read().unwrap();
+    let listen_sock_addrs = global_config().listen_sock_addrs().read().unwrap();
     let mut listener_threads = Vec::with_capacity(listen_sock_addrs.len());
     for sock_addr in &*listen_sock_addrs {
         match MdswpListener::bind(sock_addr) {
             Result::Err(err) => {
                 let message = format!("Could not bind to {}: {}", sock_addr, err);
-                log(LogLevel::Warning, &message);
+                log(LogLevel::Error, &message);
             },
             Result::Ok(listener) => {
                 let thread = thread::spawn(|| listener::listen(listener));
@@ -90,6 +117,9 @@ fn main() {
         exit(2);
     }
 
-    let message_handler = thread::spawn(message_queue::handle_incoming);
-    let _ = message_handler.join().unwrap();
+    let message_handler = thread::Builder::new()
+        .name("Message handler".to_string())
+        .spawn(message_queue::handle_incoming)
+        .unwrap();
+    message_handler.join().unwrap().unwrap();
 }

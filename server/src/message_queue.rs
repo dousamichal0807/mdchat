@@ -20,10 +20,13 @@ use chrono::Utc;
 
 use crate::client;
 use crate::client_list;
+use crate::log;
 use crate::message_list;
 use crate::user_list;
 
 use mdchat_common::message::Message;
+
+use mdlog::LogLevel;
 
 use once_cell::sync::Lazy;
 
@@ -43,42 +46,17 @@ static MESSAGE_QUEUE: Lazy<RwLock<LinkedList<Message>>> = Lazy::new(|| RwLock::n
 /// # Parameters
 ///
 /// - `addr`: [`SocketAddr`] of the client
-/// - `date_time`: [`DateTime`], in [`Utc`] time zone, when the message was sent
 /// - `text`: text of the message which client sent
 ///
 /// # Returns
 ///
-/// - [`Ok`] if adding into message queue was successful,
-/// - [`Err`] containing [`io::Error`] with detailed reason
-///
-/// [`Message`]: mdchat_util::message::Message
-/// [`SocketAddr`]: std::net::SocketAddr
-/// [`DateTime`]: chrono::DateTime
-/// [`Utc`]: chrono::Utc
-/// [`Ok`]: std::result::Result::Ok
-/// [`Err`]: std::result::Result::Err
-/// [`io::Error`]: std::io::Error
-pub fn push(addr: &SocketAddr, date_time: DateTime<Utc>, text: String) -> io::Result<()> {
-    // Get nickname. If not present, return None:
-    let sender = match client_list::get_nickname(&addr)? {
-        Some(nick) => nick,
-        None => {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                "The client has not chosen nickname yet",
-            ))
-        }
-    };
-    // Push into command queue
-    let mut message_queue = MESSAGE_QUEUE.write().unwrap();
-    message_queue.push_front(Message {
-        sender,
-        date_time,
-        text,
-    });
-    drop(message_queue);
-    // Everything is OK, return Some:
-    Ok(())
+/// - [`Result::Ok`] if adding into message queue was successful,
+/// - [`Result::Err`] containing [`io::Error`] with detailed reason
+pub fn push(addr: &SocketAddr, text: String) -> io::Result<()> {
+    let sender = client_list::get_nickname(&addr)?
+        .ok_or(io::Error::new(io::ErrorKind::NotFound, "The client have not logged in yet"))?;
+    MESSAGE_QUEUE.write().unwrap().push_front(Message::new(sender, Utc::now(), text));
+    Result::Ok(())
 }
 
 /// Function contaning a loop for continuous message handling. This function should
@@ -96,24 +74,23 @@ pub fn handle_incoming() -> io::Result<()> {
     loop {
         let next = pop();
         match next {
-            Some(message) => handle_msg(message),
-            None => thread::sleep(Duration::from_millis(0)),
+            Option::Some(message) => handle_msg(message),
+            Option::None => thread::sleep(Duration::ZERO),
         }
     }
 }
 
+#[doc(hidden)]
 fn pop() -> Option<Message> {
-    let mut message_queue = MESSAGE_QUEUE.write().unwrap();
-    let message = message_queue.pop_back();
-    drop(message_queue);
-    return message;
+    MESSAGE_QUEUE.write().unwrap().pop_back()
 }
 
+#[doc(hidden)]
 fn handle_msg(message: Message) {
-    // TODO log(LogKind::Info, &message);
+    log(LogLevel::Info, &message.to_string());
     let msg_id = message_list::push(message.clone());
     client_list::for_each(|(addr, info)| {
-        let mut stream = info.connection.try_clone().unwrap();
+        let mut stream = info.stream.try_clone().unwrap();
         match client::send_info(&mut stream, message.to_string()) {
             Ok(()) => user_list::set_last_sent_msg_id(info.nickname.as_ref().unwrap(), msg_id).unwrap(),
             Err(err) => client::handle_err(addr, &err).unwrap(),

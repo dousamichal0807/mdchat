@@ -41,7 +41,7 @@ impl Message {
     ///  -  `sender`: nickname of user, which has sent the message
     ///  -  `date_time`: date and time, when the message was sent
     ///  -  `text`: content of the message
-    pub fn new(sender: String, date_time: DateTime<Utc>, text: String) {
+    pub fn new(sender: String, date_time: DateTime<Utc>, text: String) -> Self {
         Self { sender, date_time, text }
     }
 

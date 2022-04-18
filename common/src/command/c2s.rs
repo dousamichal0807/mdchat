@@ -15,3 +15,46 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+//! A module for commands that can be sent to server by client.
+
+use chrono::DateTime;
+use chrono::Utc;
+
+/// An enumeration of possible commands that a client can send to a server.
+#[derive(Clone, Debug)]
+#[derive(Serialize, Deserialize)]
+pub enum Command {
+
+    /// Command for fetching all messages which were sent since given date and time.
+    ///
+    /// Server should respond with [`RecvMessage`] command(s) if a new message(s)
+    /// were sent after given date and time.
+    ///
+    /// [`RecvMessage`]: crate::command::s2c::Command::RecvMessage
+    Fetch (
+        /// The date and time. Server will send all messages which were sent later.
+        DateTime<Utc>
+    ),
+
+    /// Command for logging in or registering.
+    ///
+    /// Server should respond with [`LoginOk`] or [`Error`] message.
+    ///
+    /// [`Error`]: crate::command::s2c::Command::Error
+    /// [`LoginOk`]: crate::command::s2c::Command::LoginOk
+    Login {
+        /// Boolean indicating if given request is to register a new user (`true`)
+        /// or just login (`false`).
+        is_registering: bool,
+        /// Nickname of the user which client logs into/registers.
+        nickname: String,
+        /// Password of the user which client logs into/registers.
+        password: String
+    },
+
+    /// Command for sending a message.
+    SendMessage (
+        /// The text to be sent as a message.
+        String
+    ),
+}

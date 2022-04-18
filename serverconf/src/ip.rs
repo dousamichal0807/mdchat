@@ -15,6 +15,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+use crate::ConfigParseResult;
+use crate::REGEX_WHITESPACE;
+
 use std::cmp::max;
 use std::cmp::min;
 use std::collections::HashSet;
@@ -175,5 +178,46 @@ impl IpFilteringConfig {
                 return true
             }
         }
+    }
+
+    pub fn process_string(&mut self, string: &str) -> ConfigParseResult<()> {
+        todo!()
+    }
+
+    pub fn process_line(&mut self, line: &str) -> Result<(), String> {
+        let line = line.trim();
+        assert!(!line.is_empty(), "Passed empty string to process_line");
+        assert!(!line.contains("\n"), "Passed multi-line input to process_line");
+        let split: Vec<&str> = REGEX_WHITESPACE.splitn(line, 2).collect();
+        let subcommand = split[0];
+        let arg = split.get(1).map(|s| s.trim());
+        // Do something based on the subcommand:
+        match subcommand {
+            "allow" => self.__process_allow(arg),
+            "ban" => self.__process_ban(arg),
+            "ban-range" => todo!(),
+            _other => todo!(),
+        }
+    }
+
+    fn __process_allow(&mut self, arg: Option<&str>) -> Result<(), String> {
+        arg.ok_or("An IP address was expected after `ip allow`".to_string())
+            .and_then(|str| str.parse()
+                .map_err(|err| format!("`{} is an invalid IP address: {}", str, err)))
+            .map(|ip_addr| { self.allow(ip_addr); })
+    }
+
+    fn __process_ban(&mut self, arg: Option<&str>) -> Result<(), String> {
+        arg.ok_or("An IP address was expected after `ip ban`".to_string())
+            .and_then(|str| str.parse::<IpAddr>()
+                .map_err(|err| format!("`{} is an invalid IP address: {}", str, err)))
+            .map(|ip_addr| { self.ban(ip_addr); })
+    }
+
+    fn __process_ban_range(&mut self, arg: Option<&str>) -> Result<(), String> {
+        let arg = arg.ok_or("Two IP addresses were expected after `ip ban-range`".to_string())?;
+        let split: Vec<&str> = REGEX_WHITESPACE.splitn(arg, 2).collect();
+        if split.len() != 2 { return Result::Err("".to_string()) }
+        todo!()
     }
 }
