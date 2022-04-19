@@ -15,15 +15,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use chrono::DateTime;
 use chrono::Utc;
 
-use crate::client;
 use crate::client_list;
 use crate::log;
 use crate::message_list;
 use crate::user_list;
 
+use mdchat_common::command::s2c;
 use mdchat_common::message::Message;
 
 use mdlog::LogLevel;
@@ -32,7 +31,6 @@ use once_cell::sync::Lazy;
 
 use std::collections::LinkedList;
 use std::io;
-use std::net::SocketAddr;
 use std::sync::RwLock;
 use std::thread;
 use std::time::Duration;
@@ -45,18 +43,16 @@ static MESSAGE_QUEUE: Lazy<RwLock<LinkedList<Message>>> = Lazy::new(|| RwLock::n
 ///
 /// # Parameters
 ///
-/// - `addr`: [`SocketAddr`] of the client
+/// - `sender`: nickname of the user who sent the message
 /// - `text`: text of the message which client sent
 ///
 /// # Returns
 ///
 /// - [`Result::Ok`] if adding into message queue was successful,
 /// - [`Result::Err`] containing [`io::Error`] with detailed reason
-pub fn push(addr: &SocketAddr, text: String) -> io::Result<()> {
-    let sender = client_list::get_nickname(&addr)?
-        .ok_or(io::Error::new(io::ErrorKind::NotFound, "The client have not logged in yet"))?;
-    MESSAGE_QUEUE.write().unwrap().push_front(Message::new(sender, Utc::now(), text));
-    Result::Ok(())
+pub fn push(sender: String, text: String) {
+    let message = Message::new(sender, Utc::now(), text);
+    MESSAGE_QUEUE.write().unwrap().push_front(message);
 }
 
 /// Function contaning a loop for continuous message handling. This function should
@@ -87,13 +83,18 @@ fn pop() -> Option<Message> {
 
 #[doc(hidden)]
 fn handle_msg(message: Message) {
-    log(LogLevel::Info, &message.to_string());
+    // Log that message is being processed:
+    let log_message = format!("A new message is being processed: {:?}", message);
+    log(LogLevel::Debug, &log_message);
+    // Add message to message list
     let msg_id = message_list::push(message.clone());
-    client_list::for_each(|(addr, info)| {
-        let mut stream = info.stream.try_clone().unwrap();
-        match client::send_info(&mut stream, message.to_string()) {
-            Ok(()) => user_list::set_last_sent_msg_id(info.nickname.as_ref().unwrap(), msg_id).unwrap(),
-            Err(err) => client::handle_err(addr, &err).unwrap(),
+    // Send message to all clients that are logged in:
+    let command = s2c::Command::MessageRecv(message);
+    client_list::for_each(|_, client| match client.nickname() {
+        Option::None => {},
+        Option::Some(nickname) => match client.send_command(command.clone()) {
+            Result::Ok(()) => user_list::set_last_sent_msg_id(&nickname, msg_id),
+            Result::Err(err) => client.error(err.to_string()),
         }
     });
 }

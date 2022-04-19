@@ -15,12 +15,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+use crate::ConfigParseError;
 use crate::ConfigParseResult;
 use crate::REGEX_WHITESPACE;
 
 use std::cmp::max;
 use std::cmp::min;
 use std::collections::HashSet;
+use std::net::AddrParseError;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
@@ -119,7 +121,7 @@ impl IpFilteringConfig {
                 let upper = max(from, to);
                 Result::Ok(self.ban_v6_range(lower..=upper))
             },
-            other => Result::Err("Bounds of IP address range must be the same version".into())
+            _other => Result::Err("Bounds of IP address range must be the same version".into())
         }
     }
 
@@ -180,8 +182,20 @@ impl IpFilteringConfig {
         }
     }
 
-    pub fn process_string(&mut self, string: &str) -> ConfigParseResult<()> {
-        todo!()
+    pub fn process_string(&mut self, string: &str, rollback_on_error: bool) -> ConfigParseResult<()> {
+        if rollback_on_error {
+            let mut temp = Self::new();
+            temp.process_string(string, false)?;
+            self.append(&temp);
+            return Result::Ok(())
+        }
+        // Process each line:
+        let line_num = 1u32;
+        for line in string.lines() {
+            self.process_line(line)
+                .map_err(|err| ConfigParseError::syntax_error(String::new(), line_num, err))?;
+        }
+        Result::Ok(())
     }
 
     pub fn process_line(&mut self, line: &str) -> Result<(), String> {
@@ -195,11 +209,12 @@ impl IpFilteringConfig {
         match subcommand {
             "allow" => self.__process_allow(arg),
             "ban" => self.__process_ban(arg),
-            "ban-range" => todo!(),
-            _other => todo!(),
+            "ban-range" => self.__process_ban_range(arg),
+            other => Result::Err(format!("`ip {}` is an invalid subcommand", other)),
         }
     }
 
+    #[doc(hidden)]
     fn __process_allow(&mut self, arg: Option<&str>) -> Result<(), String> {
         arg.ok_or("An IP address was expected after `ip allow`".to_string())
             .and_then(|str| str.parse()
@@ -207,6 +222,7 @@ impl IpFilteringConfig {
             .map(|ip_addr| { self.allow(ip_addr); })
     }
 
+    #[doc(hidden)]
     fn __process_ban(&mut self, arg: Option<&str>) -> Result<(), String> {
         arg.ok_or("An IP address was expected after `ip ban`".to_string())
             .and_then(|str| str.parse::<IpAddr>()
@@ -214,10 +230,27 @@ impl IpFilteringConfig {
             .map(|ip_addr| { self.ban(ip_addr); })
     }
 
+    #[doc(hidden)]
     fn __process_ban_range(&mut self, arg: Option<&str>) -> Result<(), String> {
+        // See usages below for this inner function.
+        fn invalid_ip_addr(addr: &str, err: AddrParseError) -> String {
+            format!("An invalid IP address `{}` found in `ip ban-range`: {}", addr, err)
+        }
+        // Require argument:
         let arg = arg.ok_or("Two IP addresses were expected after `ip ban-range`".to_string())?;
-        let split: Vec<&str> = REGEX_WHITESPACE.splitn(arg, 2).collect();
-        if split.len() != 2 { return Result::Err("".to_string()) }
-        todo!()
+        // Split by whitespace:
+        let split: Vec<&str> = REGEX_WHITESPACE.split(arg.trim()).collect();
+        // There must be two IP addresses:
+        if split.len() != 2 {
+            return Result::Err("After `ip ban-range` expected two IP addresses separated with \
+            whitespace as argument".to_string())
+        }
+        // Parse the IP addresses:
+        let from_unparsed = split[0].trim();
+        let to_unparsed = split[1].trim();
+        let from = from_unparsed.parse().map_err(|err| invalid_ip_addr(from_unparsed, err))?;
+        let to = to_unparsed.parse().map_err(|err| invalid_ip_addr(to_unparsed, err))?;
+        // Ban IP range:
+        self.ban_range(from, to).map(|_| ())
     }
 }

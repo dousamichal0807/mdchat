@@ -16,7 +16,7 @@
  */
 
 #[derive(Clone)]
-pub struct UserInfo {
+pub struct User {
     pub nickname: String,
     pub encrypted_password: Vec<u8>,
     pub last_sent_msg_id: Option<u64>,

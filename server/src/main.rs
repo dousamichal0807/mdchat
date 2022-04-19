@@ -15,6 +15,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#[macro_use]
+mod macros;
+
 mod client;
 mod client_list;
 mod listener;
@@ -47,14 +50,14 @@ fn global_config() -> Arc<Config> {
 /// Loads global configuration file. If there is an error, the program ends with
 /// exit code 1.
 fn load_global_config() {
-    let mut config = Config::default();
+    let config = Config::default();
     match config.process_file("/etc/mdchat-server.conf", false) {
         Result::Err(err) => {
             eprintln!("Could not load configuration file:\n{:?}", err);
             exit(1);
         },
         Result::Ok(()) => GLOBAL_CONFIG.set(Arc::new(config))
-            .map_err(|err| panic!("Value already set")).unwrap(),
+            .map_err(|_| panic!("Value already set")).unwrap(),
     }
 }
 
@@ -86,7 +89,7 @@ fn decrypt(data: &[u8]) -> Vec<u8> {
 
 /// Logs a message using logger configured by global configuration.
 fn log(log_level: LogLevel, message: &str) {
-    global_config().logger().write().unwrap().log(log_level, message);
+    global_config().logger().write().unwrap().log(log_level, message).unwrap();
 }
 
 fn main() {
@@ -95,7 +98,8 @@ fn main() {
     log(LogLevel::Info, "Configuration file loaded successfully");
 
     // Initialize listeners for incoming connections:
-    let listen_sock_addrs = global_config().listen_sock_addrs().read().unwrap();
+    let global_config = global_config();
+    let listen_sock_addrs = global_config.listen_sock_addrs().read().unwrap();
     let mut listener_threads = Vec::with_capacity(listen_sock_addrs.len());
     for sock_addr in &*listen_sock_addrs {
         match MdswpListener::bind(sock_addr) {
@@ -112,11 +116,13 @@ fn main() {
         }
     }
 
+    // No listener means server cannot run.
     if listener_threads.is_empty() {
         log(LogLevel::Fatal, "There is no socket to listen for incoming connections. Quitting.");
         exit(2);
     }
 
+    // Message handler:
     let message_handler = thread::Builder::new()
         .name("Message handler".to_string())
         .spawn(message_queue::handle_incoming)

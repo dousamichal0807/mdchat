@@ -15,6 +15,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-pub mod command;
-pub mod login;
-pub mod message;
+macro_rules! cls_clone {
+    ($var0:ident $(, $var:ident)* -> $cls:expr) => {
+        {
+            let $var0 = $var0.clone();
+            $( let $var = $var.clone(); )*
+            $cls
+        }
+    }
+}

@@ -15,15 +15,17 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::{client, log};
+use crate::client::Client;
 use crate::client_list;
+use crate::log;
 
-use std::net::SocketAddr;
-use std::{io, thread};
 use mdlog::LogLevel;
 
 use mdswp::MdswpListener;
 use mdswp::MdswpStream;
+
+use std::net::SocketAddr;
+use std::thread;
 
 /// Method for infinite accepting a connection. This is a blocking method to be run
 /// in a separate thread.
@@ -42,14 +44,13 @@ pub fn listen(listener: MdswpListener) {
 }
 
 #[doc(hidden)]
-fn __handle_conn(stream: MdswpStream, peer_addr: SocketAddr) -> io::Result<()> {
-    let stream_clone = stream.try_clone()?;
+fn __handle_conn(stream: MdswpStream, peer_addr: SocketAddr) {
+    let client = Client::new(stream);
     // Run a thread for the client
-    let thread_handle = thread::Builder::new()
+    thread::Builder::new()
         .name(format!("Client thread for {}", peer_addr))
-        .spawn(move || client::client_thread(stream_clone, peer_addr))
+        .spawn(cls_clone!(client -> move || client.client_thread()))
         .unwrap();
     // Add new client stream to the clients:
-    client_list::add_connection(stream, thread_handle);
-    Result::Ok(())
+    client_list::add_connection(client);
 }

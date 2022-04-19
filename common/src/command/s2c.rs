@@ -28,27 +28,16 @@ use serde::Serialize;
 pub enum Command {
 
     /// Represents an error which requires to re-establish a connection.
-    ///
-    /// If client sends more data, server should reset the connection.
-    Error {
-
-        /// Description stating why the error occurred.
-        description: String
-    },
+    Error(String),
 
     /// Represents an important information for the client that needs user's
     /// attention. When [`Warning`] is received connection does not have to be
     /// re-established.
-    Warning {
+    Warning(String),
 
-        /// Description stating what happened.
-        description: String
-    },
+    /// Informs about successful login attempt.
+    LoginSuccess,
 
     /// Informs client about a new message.
-    MessageRecv {
-
-        /// Message which has been sent.
-        message: Message
-    }
+    MessageRecv(Message)
 }

@@ -26,10 +26,8 @@ static LAST_ID: Lazy<RwLock<u64>> = Lazy::new(|| RwLock::new(0));
 
 fn incr_and_get_id() -> u64 {
     let mut last_id = LAST_ID.write().unwrap();
-    let val = *last_id;
-    let next_id = val + 1;
+    let next_id = *last_id + 1;
     *last_id = next_id;
-    drop(last_id);
     return next_id;
 }
 
@@ -39,6 +37,25 @@ pub fn push(message: Message) -> u64 {
     message_list.insert(message_id, message);
     return message_id;
 }
+
+/*
+/// Fetches all messages since given date and time, but only 50 messages at maximum.
+pub fn fetch_all_since(date_time: DateTime<Utc>) -> LinkedList<Message> {
+    let mut fetch_list = LinkedList::new();
+    let message_list = MESSAGE_LIST.write().unwrap();
+    let mut fetch_msg_count = 0u8;
+    let mut iter = message_list.iter().rev();
+    while fetch_msg_count < 50 {
+        let next = match iter.next() {
+            Option::None => break,
+            Option::Some((_, message)) => message.clone(),
+        };
+        if next.date_time() < &date_time { break }
+        fetch_list.push_front(next);
+        fetch_msg_count += 1;
+    }
+    return fetch_list;
+}*/
 
 pub fn for_messages_newer_than<F>(message_id: u64, mut callback: F)
 where

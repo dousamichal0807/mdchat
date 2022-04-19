@@ -11,7 +11,7 @@ license-file = "../LICENSE"
 
 [dependencies]
 bit-vec = "0.6.3"
-chrono = "0.4.19"
+chrono = { version = "0.4.19", features = ["serde"] }
 rand = "0.8.5"
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.79"
