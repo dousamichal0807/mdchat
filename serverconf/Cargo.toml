@@ -6,8 +6,7 @@ edition = "2021"
 description = "A simple chat server written in Rust."
 readme = "README.md"
 repository = "https://github.com/dousamichal0807/mdchat"
-license = "GNU AGPL v3"
-license-file = "../LICENSE"
+license = "AGPL-3.0-or-later"
 
 [dependencies]
 mdlog = { git = "https://github.com/dousamichal0807/mdlog", branch = "v0.2.0" }
