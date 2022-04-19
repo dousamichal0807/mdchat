@@ -40,10 +40,10 @@ Each option as a name and arguments. Option name and argument list must be separ
 
 ```
 # Some examples (this line is a comment, by the way):
-ip-ban 192.168.5.1
+ip ban 192.168.5.1
 listen 0.0.0.0:5000
 listen [::]:5001
-message-length-max 2000
+message max-length 2000
 ```
 
 ## Configuration options
@@ -57,7 +57,9 @@ For each configuration option following is provided:
 
 ### Option list
 
+- [`ip allow`](#ip-allow)
 - [`ip ban`](#ip-ban)
+- [`ip ban-range`](#ip-ban-range)
 - [`listen`](#listen)
 - [`message max-length`](#message-max-length)
 - [`nickname allow`](#nickname-allow)
@@ -65,9 +67,22 @@ For each configuration option following is provided:
 - [`nickname max-length`](#nickname-max-length)
 - [`nickname min-length`](#nickname-min-length)
 
+### `ip allow`
+
+Option for excluding a specific IP address from ban list. Shoud be used with [`ip ban-range`](#ip-ban-range) command. This command has the highest priority from `ip allow`, `ip ban` and `ip ban-range` commands.
+
+```
+ip allow <ip-address>
+```
+```
+# Examples:
+ip allow 192.168.1.1
+ip allow fe80::5ac9:9994:9b9b:5e3
+```
+
 ### `ip ban`
 
-Option for banning a certain IP address.
+Option for banning single IP address.
 
 ```
 ip ban <ip-address>
@@ -75,6 +90,20 @@ ip ban <ip-address>
 ```
 ip ban 192.168.1.5
 ip ban 2001:db8:1234::1
+```
+
+### `ip ban-range`
+
+Option for banning a range of IP adresses. This option requires two arguments, that is the boundary IP addresses which will be banned too. See examples below:
+
+```
+ip ban-range <ip-addr-from> <ip-addr-to>
+```
+```
+# Ban 192.168.1.0/24 subnet
+ip ban-range 192.168.1.0 192.168.1.255
+# Ban first 10 addresses from 10.6.0.0/16 subnet
+ip ban-range 10.6.0.0 10.6.0.10
 ```
 
 ### `listen`
@@ -120,6 +149,21 @@ message max-length <integer>
 ```
 # Limited to 2000 bytes
 message max-length 2000
+# And these will fail since given number is out of range:
+#message max-length 0        <-- DOES NOT WORK!
+#message max-length 100000   <-- DOES NOT WORK!
+```
+
+### `message min-length`
+
+Works the same way as [`message max-length`](#message-max-length) command. Default value is 1. It is possible to set any number from 1 to 65535, but keep in mind, that minimum length must be lower than the maximum length. Also, setting very high values is highly discouraged.
+
+```
+message min-length <integer>
+```
+```
+# At least 5 bytes
+message min-length 5
 # And these will fail since given number is out of range:
 #message max-length 0        <-- DOES NOT WORK!
 #message max-length 100000   <-- DOES NOT WORK!
