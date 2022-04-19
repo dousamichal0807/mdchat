@@ -62,6 +62,7 @@ For each configuration option following is provided:
 - [`ip ban-range`](#ip-ban-range)
 - [`listen`](#listen)
 - [`message max-length`](#message-max-length)
+- [`message min-length`](#message-min-length)
 - [`nickname allow`](#nickname-allow)
 - [`nickname ban`](#nickname-ban)
 - [`nickname max-length`](#nickname-max-length)
