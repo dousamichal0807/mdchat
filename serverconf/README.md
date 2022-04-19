@@ -57,24 +57,24 @@ For each configuration option following is provided:
 
 ### Option list
 
-- [`ip-ban`](#ip-ban)
+- [`ip ban`](#ip-ban)
 - [`listen`](#listen)
-- [`message-length-max`](#message-length-max)
-- [`nickname-allow`](#nickname-allow)
-- [`nickname-ban`](#nickname-ban)
-- [`nickname-length-max`](#nickname-length-max)
-- [`nickname-length-min`](#nickname-length-min)
+- [`message max-length`](#message-max-length)
+- [`nickname allow`](#nickname-allow)
+- [`nickname ban`](#nickname-ban)
+- [`nickname max-length`](#nickname-max-length)
+- [`nickname min-length`](#nickname-min-length)
 
-### `ip-ban`
+### `ip ban`
 
 Option for banning a certain IP address.
 
 ```
-ip-ban <ip-address>
+ip ban <ip-address>
 ```
 ```
-ip-ban 192.168.1.5
-ip-ban 2001:db8:1234::1
+ip ban 192.168.1.5
+ip ban 2001:db8:1234::1
 ```
 
 ### `listen`
@@ -91,81 +91,78 @@ listen 0.0.0.0:12345
 listen [::]:54321
 ```
 
-### `message-ban`
+### `message ban`
 
 For ignoring messages which match given regular expression. This should be used to filter spam messages with inappropriate or NSFW content. Using this option is highly recommended. To allow only specific format of nickname use the regex negation operator `(?!an_expression_here)`.
 
 ```
-message-ban <regex-string>
+message ban <regex-string>
 ```
 ```
 # Ignore messages containing word "sh*t" in any case (upper letters, lower letters,
 # mixed)
-ban-nickname .*[Ss][Hh][Ii][Tt].*
+message ban .*[Ss][Hh][Ii][Tt].*
 # Same for "f*ck". These are not the best regex patterns to be used, they are here
 # to provide some examples. This example handles cases when there are hyphens or
 # other punctuation symols between the letters of the forbidden word.
-nickname-ban .*[Ff][_ -\.:;]*[Uu][_ -\.:;]*[Cc][_ -\.:;]*[Kk].*
+message ban .*[Ff][_ -\.:;]*[Uu][_ -\.:;]*[Cc][_ -\.:;]*[Kk].*
 ```
 
-### `message-length-max`
+### `message max-length`
 
-Specifies the maximum length of a message in bytes. Messages that exceed set value will be ignored and user, which the message originates from, will get notified. It is possible to set any number between 1 and 4294967296. Using `nolimit` is same as using maximum possible value. Usage of `nolimit` or very high value is highly discouraged, though.
+Specifies the maximum length of a message in bytes. Messages that exceed set value will be ignored and user, which the message originates from, will get notified. It is possible to set any number between 1 and 65535.
 
 If this option is used more than once, the last occurence will be applied.
 
 ```
-message-length-max { nolimit | <integer> }
+message max-length <integer>
 ```
 ```
-# No limit for message length
-message-length-max nolimit
 # Limited to 2000 bytes
-message-length-max 2000
+message max-length 2000
 # And these will fail since given number is out of range:
-#message-length-max 0        <-- DOES NOT WORK!
-#message-length-max 100000   <-- DOES NOT WORK!
+#message max-length 0        <-- DOES NOT WORK!
+#message max-length 100000   <-- DOES NOT WORK!
 ```
 
-### `nickname-allow`
+### `nickname allow`
 
-Exclude given nickname from the banlist if it matches some `nickname-ban` rule, is too long or too short.
+Exclude given nickname from the banlist if it matches some [`nickname ban`](#nickname-ban) rule. Also for allowing nickname which is too long or too short aggording to [`message max-length`](#message-max-length) and [`message min-length`](#message-min-length)
 
 The example shows how the admin accounts can be distinguished by specific username format, but creating an account with nickname, that is in format which admins have, is impossible.
 
 This option (intentionally) does not support regexes. Using this option without options for nickname fitering is useless and will result in slowing down the server by unnecessary nickname checks.
 
 ```
-nickname-allow <nickname>
+nickname allow <nickname>
 ```
 ```
 # Do not allow creating/logging into an account, whose nickname looks like some
 # admin's account nickname:
-nickname-ban admin-.*
+nickname ban admin-.*
 # But we need to allow admins that really exist so they can log in:
-nickname-allow admin-dousamichal
-nickname-allow admin-doejohn
+nickname allow admin-dousamichal
+nickname allow admin-doejohn
 ```
 
 
-### `nickname-ban`
+### `nickname ban`
 
 This option is for banning nicknames using given regular expression. This should be used to filter users with inappropriate nicknames. Using this option is highly recommended. To allow only specific format of nickname use the regex negation operator `(?!an_expression_here)`.
 
 ```
-nickname-ban <regex-string>
+nickname ban <regex-string>
 ```
 ```
 # Ban nicknames containing word "sh*t" in any case (upper letters, lower letters,
 # mixed)
-ban-nickname .*[Ss][Hh][Ii][Tt].*
-# Same for "f*ck". These are not the best regex patterns to be used, they are here
-# to provide some examples. This example handles cases when there are hyphens or
-# other punctuation symols between the letters of the forbidden word.
-nickname-ban .*[Ff][_ -\.:;]*[Uu][_ -\.:;]*[Cc][_ -\.:;]*[Kk].*
+nickname ban .*[Ss][Hh][Ii][Tt].*
+# Same for "f*ck". This example handles cases when there are hyphens or other
+# punctuation symols between the letters of the forbidden word.
+nickname ban .*[Ff][_ -\.:;]*[Uu][_ -\.:;]*[Cc][_ -\.:;]*[Kk].*
 ```
 
-### `nickname-length-max`
+### `nickname max-length`
 
 Sets the maximum length of a nickname in bytes which should be possible to use. Maximum length must be between 1 and 255, longer nicknames than 255 bytes are not allowed and there is no way to allow them without changing the source code. Default value is 255.
 
@@ -176,32 +173,32 @@ nickname-length-max <integer>
 ```
 ```
 # This is OK:
-nickname-length-max 20
-nickname-length-max 100
-nickname-length-max 255
+nickname max-length 20
+nickname max-length 100
+nickname max-length 255
 # Too high:
-#nickname-length-max 256   <-- DOES NOT WORK!
-#nickname-length-max 300   <-- DOES NOT WORK!
+#nickname max-length 256   <-- DOES NOT WORK!
+#nickname max-length 300   <-- DOES NOT WORK!
 # Only positive numbers are allowed:
-#nickname-length-max 0     <-- DOES NOT WORK!
-#nickname-length-max -20   <-- DOES NOT WORK!
+#nickname max-length 0     <-- DOES NOT WORK!
+#nickname max-length -20   <-- DOES NOT WORK!
 ```
 
-###  `nickname-length-min`
+###  `nickname min-length`
 
-Sets the minimum possible length of a nickname in bytes. Works the same way as [`nickname-length-max`](#nickname-length-max). Default value is 1.
+Sets the minimum possible length of a nickname in bytes. Works the same way as [`nickname max-length`](#nickname-length-max). Default value is 1.
 
 ```
 nickname-length-min <integer>
 ```
 ```
 # It is recommended to use small value.
-nickname-length-min 1
-nickname-length-min 2
-nickname-length-min 10
+nickname min-length 1
+nickname min-length 2
 # This is NOT recommended:
-nickname-length-min 100
+nickname min-length 10
+nickname min-length 100
 # These are out of range:
-#nickname-length-min 0     <-- DOES NOT WORK!
-#nickname-length-min 256   <-- DOES NOT WORK!
+#nickname min-length 0     <-- DOES NOT WORK!
+#nickname min-length 256   <-- DOES NOT WORK!
 ```
