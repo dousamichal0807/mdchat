@@ -128,8 +128,6 @@ impl Client {
     /// automatically inform client about error that happened and will close the
     /// connection.
     pub fn error(&self, err: String) {
-        // Log error:
-        log(LogLevel::Error, &err);
         // Send response back to client:
         let command = s2c::Command::Error(err.to_string());
         let _ = self.send_command(command);
@@ -141,7 +139,7 @@ impl Client {
     #[doc(hidden)]
     fn recv_command(&self) -> io::Result<Option<c2s::Command>> {
         // Lock stream
-        let mut stream = self.stream.write().unwrap();
+        let mut stream = self.stream.read().unwrap().try_clone()?;
         // Read exactly four bytes which will denote next message length:
         let mut buffer = [0; size_of::<u32>()];
         let read_bytes = stream.read(&mut buffer)?;
@@ -156,10 +154,9 @@ impl Client {
         }
         // The data length:
         let data_len = u32::from_be_bytes(buffer) as usize;
-        // Prepare a buffer with length of `data_len` bytes:
-        let mut buffer = Vec::with_capacity(data_len);
-        for _ in 0..data_len { buffer.push(0); }
-        // Read exactly `data_len` bytes:
+        // Prepare a buffer with length of `data_len` bytes and read exactly
+        // `data_len` bytes:
+        let mut buffer = vec![0; data_len];
         stream.read_exact(&mut buffer[0..data_len])?;
         // Decrypt
         let decrypted = decrypt(&buffer[0..data_len]);

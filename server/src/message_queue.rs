@@ -37,9 +37,7 @@ use std::time::Duration;
 
 static MESSAGE_QUEUE: Lazy<RwLock<LinkedList<Message>>> = Lazy::new(|| RwLock::new(LinkedList::new()));
 
-/// Pushes a new [`Message`] into message queue. Note that pushing into queue may not
-/// be successful: that's when the passed [`SocketAddr`] is not present in the client
-/// list, e.g. client with specified [`SocketAddr`] is not connected.
+/// Pushes a new [`Message`] into message queue.
 ///
 /// # Parameters
 ///
@@ -47,9 +45,6 @@ static MESSAGE_QUEUE: Lazy<RwLock<LinkedList<Message>>> = Lazy::new(|| RwLock::n
 /// - `text`: text of the message which client sent
 ///
 /// # Returns
-///
-/// - [`Result::Ok`] if adding into message queue was successful,
-/// - [`Result::Err`] containing [`io::Error`] with detailed reason
 pub fn push(sender: String, text: String) {
     let message = Message::new(sender, Utc::now(), text);
     MESSAGE_QUEUE.write().unwrap().push_front(message);

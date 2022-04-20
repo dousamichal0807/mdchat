@@ -77,7 +77,7 @@ impl Config {
         Self {
             ip_filtering: RwLock::new(IpFilteringConfig::new()),
             listen_sock_addrs: RwLock::new(HashSet::new()),
-            logger: RwLock::new(TextLogger::new(LogLevel::Info, stdout())),
+            logger: RwLock::new(TextLogger::new(LogLevel::Debug, stdout())),
             message_max_len: unsafe { RwLock::new(NonZeroU16::new_unchecked(u16::MAX)) },
             message_min_len: unsafe { RwLock::new(NonZeroU16::new_unchecked(1)) },
             nickname_filtering: RwLock::new(NicknameFilteringConfig::new())

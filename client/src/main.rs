@@ -15,106 +15,119 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-mod message;
+#[macro_use]
+mod util;
 
-use std::io::stdin;
-use std::io::stdout;
-use std::io::BufRead;
+use crate::util::{error, recv_command};
+use crate::util::send_command;
+
 use std::io::BufReader;
-use std::io::BufWriter;
+use std::io::BufRead;
+use std::io::stdin;
+use std::io::Stdin;
 use std::io::Write;
-use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::process::exit;
 use std::thread;
 
-use mdlog::LogLevel;
+use mdchat_common::command::{c2s, s2c};
+use mdchat_common::login::LoginRequest;
 
 use mdswp::MdswpStream;
 
-/// Main entry for MDChat client
+use once_cell::sync::Lazy;
+
+static mut STDIN_READER: Lazy<BufReader<Stdin>> = Lazy::new(|| BufReader::new(stdin()));
+
 fn main() {
-    let mut stdin_reader = BufReader::new(stdin());
-    let mut stdin_buffer = String::new();
-
-    let mut ip_addr: Option<IpAddr> = None;
-    let mut port: Option<u16> = None;
-
-    while matches!(ip_addr, None) {
-        print!("Server IP address: ");
-        stdout().flush().unwrap();
-        stdin_reader.read_line(&mut stdin_buffer).unwrap();
-        match stdin_buffer.trim().parse() {
-            Ok(ip) => ip_addr = Some(ip),
-            Err(err) => log(LogLevel::Error, err),
+    // IP address and port:
+    let mut ip_addr = Option::None;
+    let mut port = Option::None;
+    // Ask for IP address:
+    while matches!(ip_addr, Option::None) {
+        let ip = input!("Server IP address: ");
+        match ip.trim().parse() {
+            Result::Ok(ip) => ip_addr = Option::Some(ip),
+            Result::Err(err) => println!("Invalid IP address: {}", err),
         }
-        stdin_buffer.clear();
     }
-
-    while matches!(port, None) {
-        print!("Port: ");
-        stdout().flush().unwrap();
-        stdin_reader.read_line(&mut stdin_buffer).unwrap();
-        match stdin_buffer.trim().parse() {
-            Ok(p) if p >= 1000 => port = Some(p),
-            Ok(p) => log(
-                LogLevel::Error,
-                format!("Invalid input: Port number {} too small", p),
-            ),
-            Err(err) => log(LogLevel::Error, err),
+    // Ask for port:
+    while matches!(port, Option::None) {
+        let p = input!("Port: ");
+        match p.trim().parse() {
+            Result::Ok(p) if p >= 1000 => port = Option::Some(p),
+            Result::Ok(p) => println!("Invalid input: Port number {} too small", p),
+            Result::Err(err) => println!("Invalid input: {}", err),
         }
-        stdin_buffer.clear();
     }
-
+    // Ask for username and password:
+    let nickname = input!("Nickname: ");
+    let password = input!("Password: ");
+    // Ask for login or register
+    let mut is_registering = Option::None;
+    while matches!(is_registering, Option::None) {
+        let lor = input!("Login or register? (login is default) [L/R] ");
+        match lor.trim() {
+            "L" | "l" | "" => is_registering = Option::Some(false),
+            "R" | "r" => is_registering = Option::Some(true),
+            _other => {}
+        }
+    }
+    // Unwrap IP address and port and build socket address
     let ip_addr = ip_addr.unwrap();
     let port = port.unwrap();
+    let is_registering = is_registering.unwrap();
     let socket = SocketAddr::new(ip_addr, port);
-
-    let mut username = String::new();
-    print!("Username: ");
-    stdout().flush().unwrap();
-    stdin_reader.read_line(&mut username).unwrap();
-
-    let mut password = String::new();
-    print!("Password: ");
-    stdout().flush().unwrap();
-    stdin_reader.read_line(&mut password).unwrap();
-
-    let tcp_conn = match MdswpStream::connect(socket) {
-        Ok(stream) => stream,
-        Err(err) => {
-            log(LogLevel::Fatal, format!("Could not connect: {}", err));
-            exit(1)
+    // Connect to server
+    let mut connection = match MdswpStream::connect(socket) {
+        Result::Ok(stream) => {
+            println!("Connected to server successfully. Now you can type your messages");
+            stream
+        },
+        Result::Err(err) => {
+            println!("Could not connect: {}", err);
+            input!("Press Enter to quit ");
+            exit(1);
         }
     };
-
-    log(
-        LogLevel::Info,
-        "Connected to server successfully. Now you can type your messages",
-    );
-
-    let mut tcp_conn_writer = BufWriter::new(tcp_conn.try_clone().unwrap());
-    thread::spawn(|| message::handle_incoming(tcp_conn));
-
-    let login_message = username.trim().to_string() + "\n" + password.trim();
-    match message::send(&mut tcp_conn_writer, &*MESSAGE_CRYPT, &login_message) {
-        Ok(_) => {}
-        Err(err) => {
-            log(LogLevel::Fatal, format!("Error: {}", err));
+    // Receiver thread
+    let conn_clone = connection.try_clone().unwrap();
+    thread::spawn(|| listen_for_incoming(conn_clone));
+    // Login command
+    let login_request = LoginRequest::new(is_registering, nickname, password);
+    let login_command = c2s::Command::Login(login_request);
+    // Send login command
+    match send_command(&mut connection, login_command) {
+        Result::Ok(()) => {}
+        Result::Err(err) => {
+            println!("Fatal error: {}", err);
+            input!("Press Enter to quit...");
             exit(1)
         }
     }
 
     loop {
-        let mut stdin_buffer = String::new();
-        stdin_reader.read_line(&mut stdin_buffer).unwrap();
-        let trim = stdin_buffer.trim();
-        match message::send(&mut tcp_conn_writer, &*MESSAGE_CRYPT, trim) {
-            Ok(_) => {}
-            Err(err) => {
-                log(LogLevel::Fatal, format!("Error: {}", err));
-                exit(1)
-            }
+        let message = input!("");
+        let command = c2s::Command::SendMessage(message);
+        let send_result =  util::send_command(&mut connection, command);
+        if let Result::Err(err) = send_result {
+            util::error(&mut connection, &err.to_string());
+        }
+    }
+}
+
+fn listen_for_incoming(mut conn: MdswpStream) {
+    while !conn.is_err() {
+        let command = recv_command(&mut conn);
+        let command = match command {
+            Result::Ok(cmd) => cmd,
+            Result::Err(err) => error(&mut conn, &err.to_string())
+        };
+        match command {
+            s2c::Command::LoginSuccess => println!("Login successful! Now type your messages."),
+            s2c::Command::MessageRecv(message) => println!("{}", message),
+            s2c::Command::Warning(description) => println!("WARNING: {}", description),
+            s2c::Command::Error(description) => println!("ERROR: {}", description)
         }
     }
 }
