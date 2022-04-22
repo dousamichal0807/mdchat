@@ -16,7 +16,7 @@
  */
 
 use crate::client::Client;
-use crate::client_list;
+use crate::{client_list, global_config};
 use crate::log;
 
 use mdlog::LogLevel;
@@ -44,11 +44,16 @@ pub fn listen(listener: MdswpListener) {
 }
 
 #[doc(hidden)]
-fn __handle_conn(stream: MdswpStream, peer_addr: SocketAddr) {
+fn __handle_conn(mut stream: MdswpStream, peer_addr: SocketAddr) {
+    // Kick all banned IPs
+    if !global_config().is_allowed_ip_addr(&peer_addr.ip()) {
+        let _ = stream.reset();
+        return;
+    }
     let client = Client::new(stream);
     // Run a thread for the client
     thread::Builder::new()
-        .name(format!("Client thread for {}", peer_addr))
+        .name(format!("client {}", peer_addr))
         .spawn(cls_clone!(client -> move || client.client_thread()))
         .unwrap();
     // Add new client stream to the clients:

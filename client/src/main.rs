@@ -18,7 +18,7 @@
 #[macro_use]
 mod util;
 
-use crate::util::{error, recv_command};
+use crate::util::{error, io_error, is_err, recv_command};
 use crate::util::send_command;
 
 use std::io::BufReader;
@@ -28,6 +28,7 @@ use std::io::Stdin;
 use std::io::Write;
 use std::net::SocketAddr;
 use std::process::exit;
+use std::sync::RwLock;
 use std::thread;
 
 use mdchat_common::command::{c2s, s2c};
@@ -38,6 +39,7 @@ use mdswp::MdswpStream;
 use once_cell::sync::Lazy;
 
 static mut STDIN_READER: Lazy<BufReader<Stdin>> = Lazy::new(|| BufReader::new(stdin()));
+static IS_ERR: Lazy<RwLock<bool>> = Lazy::new(|| RwLock::new(false));
 
 fn main() {
     // IP address and port:
@@ -79,7 +81,7 @@ fn main() {
     let is_registering = is_registering.unwrap();
     let socket = SocketAddr::new(ip_addr, port);
     // Connect to server
-    let mut connection = match MdswpStream::connect(socket) {
+    let mut conn = match MdswpStream::connect(socket) {
         Result::Ok(stream) => {
             println!("Connected to server successfully. Now you can type your messages");
             stream
@@ -91,43 +93,40 @@ fn main() {
         }
     };
     // Receiver thread
-    let conn_clone = connection.try_clone().unwrap();
+    let conn_clone = conn.try_clone().unwrap();
     thread::spawn(|| listen_for_incoming(conn_clone));
     // Login command
     let login_request = LoginRequest::new(is_registering, nickname, password);
     let login_command = c2s::Command::Login(login_request);
     // Send login command
-    match send_command(&mut connection, login_command) {
+    match send_command(&mut conn, login_command) {
         Result::Ok(()) => {}
-        Result::Err(err) => {
-            println!("Fatal error: {}", err);
-            input!("Press Enter to quit...");
-            exit(1)
-        }
+        Result::Err(err) => io_error(&mut conn, err)
     }
 
     loop {
         let message = input!("");
+        if is_err() { return }
         let command = c2s::Command::SendMessage(message);
-        let send_result =  util::send_command(&mut connection, command);
+        let send_result =  util::send_command(&mut conn, command);
         if let Result::Err(err) = send_result {
-            util::error(&mut connection, &err.to_string());
+            util::io_error(&mut conn, err);
         }
     }
 }
 
 fn listen_for_incoming(mut conn: MdswpStream) {
-    while !conn.is_err() {
+    while !is_err() {
         let command = recv_command(&mut conn);
         let command = match command {
             Result::Ok(cmd) => cmd,
-            Result::Err(err) => error(&mut conn, &err.to_string())
+            Result::Err(err) => { io_error(&mut conn, err); return; }
         };
         match command {
             s2c::Command::LoginSuccess => println!("Login successful! Now type your messages."),
             s2c::Command::MessageRecv(message) => println!("{}", message),
             s2c::Command::Warning(description) => println!("WARNING: {}", description),
-            s2c::Command::Error(description) => println!("ERROR: {}", description)
+            s2c::Command::Error(description) => error(&mut conn, description)
         }
     }
 }

@@ -9,7 +9,7 @@ repository = "https://github.com/dousamichal0807/mdchat"
 license = "AGPL-3.0-or-later"
 
 [dependencies]
-mdlog = { git = "https://github.com/dousamichal0807/mdlog", branch = "v0.2.0" }
+mdlog = { git = "https://github.com/dousamichal0807/mdlog", branch = "development" }
 once_cell = "1.10"
 regex = "1.5"
 thiserror = "1.0"

@@ -172,7 +172,7 @@ message min-length 5
 
 ### `nickname allow`
 
-Exclude given nickname from the banlist if it matches some [`nickname ban`](#nickname-ban) rule. Also for allowing nickname which is too long or too short aggording to [`message max-length`](#message-max-length) and [`message min-length`](#message-min-length)
+Exclude given nickname from the banlist if it matches some [`nickname ban`](#nickname-ban) rule. It is used also for allowing nickname which is too long or too short according to [`nickname max-length`](#nickname-max-length) and [`nickname min-length`](#nickname-min-length)
 
 The example shows how the admin accounts can be distinguished by specific username format, but creating an account with nickname, that is in format which admins have, is impossible.
 
@@ -231,7 +231,7 @@ nickname max-length 255
 
 ###  `nickname min-length`
 
-Sets the minimum possible length of a nickname in bytes. Works the same way as [`nickname max-length`](#nickname-length-max). Default value is 1.
+Sets the minimum possible length of a nickname in bytes. Works the same way as [`nickname max-length`](#nickname-max-length). Default value is 1.
 
 ```
 nickname-length-min <integer>

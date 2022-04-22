@@ -63,9 +63,9 @@ impl Message {
 
 impl fmt::Display for Message {
     fn fmt(&self, fmtr: &mut fmt::Formatter) -> fmt::Result {
-        write!(fmtr, "{}@{}: {}",
+        write!(fmtr, "{} @ {}: {}",
                self.sender,
-               self.date_time.with_timezone(&Local).to_rfc3339(),
+               self.date_time.with_timezone(&Local).to_rfc2822(),
                self.text
         )
     }

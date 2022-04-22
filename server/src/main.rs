@@ -124,7 +124,7 @@ fn main() {
 
     // Message handler:
     let message_handler = thread::Builder::new()
-        .name("Message handler".to_string())
+        .name("message handler".to_string())
         .spawn(message_queue::handle_incoming)
         .unwrap();
     message_handler.join().unwrap().unwrap();

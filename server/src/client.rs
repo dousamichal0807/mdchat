@@ -15,12 +15,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::{client_list, message_list};
+use crate::client_list;
 use crate::decrypt;
 use crate::encrypt;
 use crate::global_config;
 use crate::log;
 use crate::message_queue;
+use crate::message_list;
 use crate::user_list;
 
 use mdchat_common::command::c2s;

@@ -15,6 +15,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+use crate::IS_ERR;
+
 use mdchat_common::command::c2s;
 use mdchat_common::command::s2c;
 
@@ -24,7 +26,6 @@ use std::error::Error;
 use std::io;
 use std::io::Read;
 use std::io::Write;
-use std::process::exit;
 
 /// Flushes `stdout`.
 macro_rules! flush {
@@ -104,6 +105,9 @@ pub fn recv_command(conn: &mut MdswpStream) -> io::Result<s2c::Command> {
     Result::Ok(command)
 }
 
+/// Returns if an error occurred.
+pub fn is_err() -> bool { *IS_ERR.read().unwrap() }
+
 #[doc(hidden)]
 fn encrypt(data: Vec<u8>) -> Vec<u8> {
     data
@@ -114,8 +118,14 @@ fn decrypt(data: Vec<u8>) -> Vec<u8> {
     data
 }
 
-pub fn error(conn: &mut MdswpStream, message: &str) -> ! {
+/// To inform user about I/O error during communicating with the server.
+pub fn io_error(conn: &mut MdswpStream, err: io::Error) {
+    error(conn, format!("Cannot commuticate with server: {}", err));
+}
+
+/// To inform user about generic error.
+pub fn error(conn: &mut MdswpStream, description: String) {
     let _ = conn.reset();
-    println!("FATAL: {}", message);
-    exit(1)
+    println!("FATAL: {}\nFATAL: Press Enter to quit", description);
+    *IS_ERR.write().unwrap() = true;
 }
